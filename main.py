@@ -6,6 +6,7 @@ import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import concurrent.futures
+import threading  # 新增: 线程本地存储用于日志上下文
 
 from coreApi.MainLogicApi import ApiClient
 from coreApi.AiServiceClient import generate_article
@@ -14,17 +15,37 @@ from util.MessagePush import MessagePusher
 from util.HelperFunctions import desensitize_name, is_holiday
 from util.FileUploader import upload_img
 
-logging.basicConfig(
-    format="[%(asctime)s] %(name)s %(levelname)s: %(message)s",
-    level=logging.INFO,
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+# 日志上下文支持
+_log_ctx = threading.local()
+
+
+class UserTagFormatter(logging.Formatter):
+
+    def format(self, record):
+        # 在格式化前添加 userTag 属性
+        record.userTag = getattr(_log_ctx, "tag", "-")
+        return super().format(record)
+
+
+# 配置日志
+_root_logger = logging.getLogger()
+if not _root_logger.handlers:
+    # 创建控制台处理器
+    handler = logging.StreamHandler()
+    formatter = UserTagFormatter(
+        fmt="[%(asctime)s] %(name)s %(levelname)s [%(userTag)s]: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S")
+    handler.setFormatter(formatter)
+    _root_logger.addHandler(handler)
+    _root_logger.setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 USER_DIR = os.path.join(os.path.dirname(__file__), "user")
 
 
-def perform_clock_in(api_client: ApiClient, config: ConfigManager) -> Dict[str, Any]:
+def perform_clock_in(api_client: ApiClient,
+                     config: ConfigManager) -> Dict[str, Any]:
     """
     执行打卡操作。
 
@@ -48,7 +69,8 @@ def perform_clock_in(api_client: ApiClient, config: ConfigManager) -> Dict[str, 
             display_type = "下班"
 
         # 判断是否为节假日模式并跳过打卡
-        if config.get_value("config.clockIn.mode") == "holiday" and is_holiday():
+        if config.get_value(
+                "config.clockIn.mode") == "holiday" and is_holiday():
             if not config.get_value("config.clockIn.specialClockIn"):
                 return {
                     "status": "skip",
@@ -76,8 +98,7 @@ def perform_clock_in(api_client: ApiClient, config: ConfigManager) -> Dict[str, 
         # 检查是否已经打过卡
         if last_checkin_info and last_checkin_info["type"] == checkin_type:
             last_checkin_time = datetime.strptime(
-                last_checkin_info["createTime"], "%Y-%m-%d %H:%M:%S"
-            )
+                last_checkin_info["createTime"], "%Y-%m-%d %H:%M:%S")
             if last_checkin_time.date() == current_time.date():
                 logger.info(f"今日 {display_type} 卡已打，无需重复打卡")
                 return {
@@ -98,9 +119,7 @@ def perform_clock_in(api_client: ApiClient, config: ConfigManager) -> Dict[str, 
         )
         description = (
             random.choice(config.get_value("config.clockIn.description"))
-            if config.get_value("config.clockIn.description")
-            else None
-        )
+            if config.get_value("config.clockIn.description") else None)
 
         # 设置打卡信息
         checkin_info = {
@@ -126,10 +145,15 @@ def perform_clock_in(api_client: ApiClient, config: ConfigManager) -> Dict[str, 
         }
     except Exception as e:
         logger.error(f"打卡失败: {e}")
-        return {"status": "fail", "message": f"打卡失败: {str(e)}", "task_type": "打卡"}
+        return {
+            "status": "fail",
+            "message": f"打卡失败: {str(e)}",
+            "task_type": "打卡"
+        }
 
 
-def submit_daily_report(api_client: ApiClient, config: ConfigManager) -> Dict[str, Any]:
+def submit_daily_report(api_client: ApiClient,
+                        config: ConfigManager) -> Dict[str, Any]:
     """
     提交日报。
 
@@ -165,9 +189,8 @@ def submit_daily_report(api_client: ApiClient, config: ConfigManager) -> Dict[st
         # 检查是否已经提交过今天的日报
         if submitted_reports:
             last_report = submitted_reports[0]
-            last_submit_time = datetime.strptime(
-                last_report["createTime"], "%Y-%m-%d %H:%M:%S"
-            )
+            last_submit_time = datetime.strptime(last_report["createTime"],
+                                                 "%Y-%m-%d %H:%M:%S")
             if last_submit_time.date() == current_time.date():
                 logger.info("今天已经提交过日报，跳过本次提交")
                 return {
@@ -227,9 +250,8 @@ def submit_daily_report(api_client: ApiClient, config: ConfigManager) -> Dict[st
         }
 
 
-def submit_weekly_report(
-    config: ConfigManager, api_client: ApiClient
-) -> Dict[str, Any]:
+def submit_weekly_report(config: ConfigManager,
+                         api_client: ApiClient) -> Dict[str, Any]:
     """提交周报
 
     Args:
@@ -250,7 +272,8 @@ def submit_weekly_report(
     current_time = datetime.now()
     submit_day = config.get_value("config.reportSettings.weekly.submitTime")
 
-    if current_time.weekday() + 1 != submit_day or not (current_time.hour >= 12):
+    if current_time.weekday() + 1 != submit_day or not (current_time.hour
+                                                        >= 12):
         logger.info("未到周报提交时间")
         return {
             "status": "skip",
@@ -335,9 +358,8 @@ def submit_weekly_report(
         }
 
 
-def submit_monthly_report(
-    config: ConfigManager, api_client: ApiClient
-) -> Dict[str, Any]:
+def submit_monthly_report(config: ConfigManager,
+                          api_client: ApiClient) -> Dict[str, Any]:
     """提交月报
 
     Args:
@@ -356,14 +378,13 @@ def submit_monthly_report(
         }
 
     current_time = datetime.now()
-    last_day_of_month = (current_time.replace(day=1) + timedelta(days=32)).replace(
-        day=1
-    ) - timedelta(days=1)
+    last_day_of_month = (current_time.replace(day=1) +
+                         timedelta(days=32)).replace(day=1) - timedelta(days=1)
     submit_day = config.get_value("config.reportSettings.monthly.submitTime")
 
-    if current_time.day != min(submit_day, last_day_of_month.day) or not (
-        current_time.hour >= 12
-    ):
+    if current_time.day != min(
+            submit_day,
+            last_day_of_month.day) or not (current_time.hour >= 12):
         logger.info("未到月报提交时间")
         return {
             "status": "skip",
@@ -447,12 +468,29 @@ def run(config: ConfigManager) -> None:
     Args:
         config (ConfigManager): 配置管理器。
     """
+    # 设置日志上下文标签: 文件名/ENV + 脱敏昵称
+    try:
+        file_part = "ENV"  # 默认环境变量来源
+        try:
+            path_attr = getattr(config, "_path", None)
+            if path_attr is not None:
+                file_part = os.path.splitext(os.path.basename(
+                    str(path_attr)))[0]
+        except Exception:
+            pass
+        nickname = desensitize_name(
+            config.get_value("userInfo.nikeName")) or "?"
+        _log_ctx.tag = f"{file_part}|{nickname}"
+    except Exception:
+        _log_ctx.tag = "-"
+
     results: List[Dict[str, Any]] = []
 
     try:
         pusher = MessagePusher(config.get_value("config.pushNotifications"))
     except Exception as e:
         logger.error(f"获取消息推送客户端失败: {str(e)}")
+        _log_ctx.tag = "-"  # 清理
         return
 
     try:
@@ -472,14 +510,18 @@ def run(config: ConfigManager) -> None:
     except Exception as e:
         error_message = f"获取API客户端失败: {str(e)}"
         logger.error(error_message)
-        results.append(
-            {"status": "fail", "message": error_message, "task_type": "API客户端初始化"}
-        )
+        results.append({
+            "status": "fail",
+            "message": error_message,
+            "task_type": "API客户端初始化"
+        })
         pusher.push(results)
         logger.info("任务异常结束")
+        _log_ctx.tag = "-"  # 清理
         return
 
-    logger.info(f"开始执行：{desensitize_name(config.get_value('userInfo.nikeName'))}")
+    logger.info(
+        f"开始执行：{desensitize_name(config.get_value('userInfo.nikeName'))}")
 
     try:
         results = [
@@ -491,12 +533,16 @@ def run(config: ConfigManager) -> None:
     except Exception as e:
         error_message = f"执行任务时发生错误: {str(e)}"
         logger.error(error_message)
-        results.append(
-            {"status": "fail", "message": error_message, "task_type": "任务执行"}
-        )
+        results.append({
+            "status": "fail",
+            "message": error_message,
+            "task_type": "任务执行"
+        })
 
     pusher.push(results)
-    logger.info(f"执行结束：{desensitize_name(config.get_value('userInfo.nikeName'))}")
+    logger.info(
+        f"执行结束：{desensitize_name(config.get_value('userInfo.nikeName'))}")
+    _log_ctx.tag = "-"  # 清理
 
 
 def execute_tasks(selected_files: Optional[List[str]] = None):
@@ -506,11 +552,16 @@ def execute_tasks(selected_files: Optional[List[str]] = None):
     Args:
         selected_files (Optional[List[str]]): 指定配置文件列表（不含扩展名），默认为 None。
     """
+    # 设置主线程的日志标签
+    _log_ctx.tag = "MAIN"
+
     logger.info("开始执行工学云任务")
 
     # 获取用户目录下的所有 .json 文件(不含后缀)
     try:
-        json_files = [f[:-5] for f in os.listdir(USER_DIR) if f.endswith(".json")]
+        json_files = [
+            f[:-5] for f in os.listdir(USER_DIR) if f.endswith(".json")
+        ]
         logger.info(f"发现 {len(json_files)} 个配置文件")
     except OSError as e:
         logger.error(f"扫描配置文件目录失败: {e}")

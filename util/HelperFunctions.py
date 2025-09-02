@@ -1,8 +1,15 @@
 import re
 import logging
+import threading
 from datetime import datetime, timedelta
 
 import requests
+
+# 尝试导入主模块的日志上下文，失败则创建本地版本
+try:
+    from main import _log_ctx
+except ImportError:
+    _log_ctx = threading.local()
 
 logger = logging.getLogger(__name__)
 
@@ -121,9 +128,10 @@ def strip_markdown(text):
     text = re.sub(r"^\[\^.+?\]:.*$", "", text, flags=re.MULTILINE)
 
     # 8. 移除表格分隔（仅去除 | 和 ---、不动表格实际内容）
-    text = re.sub(
-        r"^\s*\|?(?:\s*[:-]+\s*\|)+\s*[:-]+\s*\|?\s*$", "", text, flags=re.MULTILINE
-    )
+    text = re.sub(r"^\s*\|?(?:\s*[:-]+\s*\|)+\s*[:-]+\s*\|?\s*$",
+                  "",
+                  text,
+                  flags=re.MULTILINE)
     text = re.sub(r"\|", " ", text)  # 用空格替掉行内|
 
     # 9. 移除水平分割线
@@ -144,9 +152,8 @@ def strip_markdown(text):
     text = re.sub(r"^#{1,6}\s+(.*)$", r"\1", text, flags=re.MULTILINE)
 
     # 13. 移除列表标记
-    text = re.sub(
-        r"^(\s*)[-*+]\s+\[.\]\s+", r"\1", text, flags=re.MULTILINE
-    )  # 任务列表勾选框
+    text = re.sub(r"^(\s*)[-*+]\s+\[.\]\s+", r"\1", text,
+                  flags=re.MULTILINE)  # 任务列表勾选框
     text = re.sub(r"^(\s*)[-*+]\s+", r"\1", text, flags=re.MULTILINE)
     text = re.sub(r"^(\s*)\d+\.\s+", r"\1", text, flags=re.MULTILINE)
 

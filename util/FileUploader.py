@@ -78,13 +78,11 @@ def upload_img(token: str, snowFlakeId: str, userId: str, count: int) -> str:
 
     # 获取图片文件夹路径
     images_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "images"
-    )
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "images")
 
     # 获取所有符合条件的图片文件路径
     all_images = [
-        os.path.join(images_dir, f)
-        for f in os.listdir(images_dir)
+        os.path.join(images_dir, f) for f in os.listdir(images_dir)
         if f.lower().endswith((".png", ".jpg", ".jpeg"))
     ]
 

@@ -1,5 +1,6 @@
 import logging
 import time
+import threading
 from typing import Dict, Any, Optional
 from urllib.parse import urljoin
 
@@ -7,6 +8,12 @@ import requests
 from requests.exceptions import RequestException
 
 from util.HelperFunctions import strip_markdown
+
+# 尝试导入主模块的日志上下文，失败则创建本地版本
+try:
+    from main import _log_ctx
+except ImportError:
+    _log_ctx = threading.local()
 
 logger = logging.getLogger(__name__)
 
@@ -54,24 +61,27 @@ def generate_article(
         f"不得使用 Markdown 语法，字数不少于 {count} 字。"
         f"文章需与职位描述相关，并使用以下模板："
         "\n\n模板：\n实习地点：xxxx\n\n工作内容：\n\nxxxxxx\n\n工作总结：\n\nxxxxxx\n\n"
-        "遇到问题：\n\nxxxxxx\n\n自我评价：\n\nxxxxxx"
-    )
+        "遇到问题：\n\nxxxxxx\n\n自我评价：\n\nxxxxxx")
 
     # 提取公司信息，保证对象安全
     company_info = job_info.get("practiceCompanyEntity", {}) or {}
     data = {
-        "model": api_model,
+        "model":
+        api_model,
         "messages": [
-            {"role": "system", "content": system_prompt},
             {
-                "role": "user",
-                "content": (
-                    f"相关资料：报告标题：{title}，"
-                    f"工作地点：{job_info.get('jobAddress', '未知')}; "
-                    f"公司名：{company_info.get('companyName', '未知')}; "
-                    f"岗位职责：{job_info.get('quartersIntroduce', '未提供')}; "
-                    f"公司所属行业：{company_info.get('tradeValue', '未提供')}"
-                ),
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role":
+                "user",
+                "content":
+                (f"相关资料：报告标题：{title}，"
+                 f"工作地点：{job_info.get('jobAddress', '未知')}; "
+                 f"公司名：{company_info.get('companyName', '未知')}; "
+                 f"岗位职责：{job_info.get('quartersIntroduce', '未提供')}; "
+                 f"公司所属行业：{company_info.get('tradeValue', '未提供')}"),
             },
         ],
     }
@@ -84,7 +94,8 @@ def generate_article(
             choices = resp_json.get("choices")
             if not choices or not isinstance(choices, list):
                 return None
-            return choices[0].get("message", {}).get("content", "").strip() or None
+            return choices[0].get("message", {}).get("content",
+                                                     "").strip() or None
         except Exception as e:
             logger.exception("解析响应发生异常")
             return None
