@@ -3,7 +3,6 @@ import time
 import logging
 from typing import List
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -21,11 +20,9 @@ def build_upload_key(snowFlakeId: str, userId: str) -> str:
     Returns:
         str: 生成的文件上传路径。
     """
-    return (
-        f"upload/{snowFlakeId}"
-        f"/{time.strftime('%Y-%m-%d', time.localtime())}"
-        f"/report/{userId}_{int(time.time() * 1000000)}.jpg"
-    )
+    return (f"upload/{snowFlakeId}"
+            f"/{time.strftime('%Y-%m-%d', time.localtime())}"
+            f"/report/{userId}_{int(time.time() * 1000000)}.jpg")
 
 
 def upload_image(
@@ -67,7 +64,10 @@ def upload_image(
 
     for attempt in range(max_retries):
         try:
-            response = requests.post(url, headers=headers, files=files, data=data)
+            response = requests.post(url,
+                                     headers=headers,
+                                     files=files,
+                                     data=data)
             response.raise_for_status()  # 如果响应状态不是200，将引发HTTPError异常
 
             # 解析响应中的 key
@@ -81,9 +81,7 @@ def upload_image(
             logger.error(f"上传失败 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
             if attempt < max_retries - 1:
                 # 指数回退，重试前等待一段时间
-                wait_time = retry_delay * (
-                    2**attempt
-                )  # 每次重试时延长等待时间（指数回退）
+                wait_time = retry_delay * (2**attempt)  # 每次重试时延长等待时间（指数回退）
                 logger.info(f"等待 {wait_time} 秒后重试...")
                 time.sleep(wait_time)
             else:

@@ -12,9 +12,8 @@ import cv2
 logger = logging.getLogger(__name__)
 
 
-def calculate_precise_slider_distance(
-    target_start_x: int, target_end_x: int, slider_width: int
-) -> float:
+def calculate_precise_slider_distance(target_start_x: int, target_end_x: int,
+                                      slider_width: int) -> float:
     """
     计算滑块需要移动的精确距离，并添加微小随机偏移。
 
@@ -95,12 +94,10 @@ def slide_match(target_bytes: bytes, background_bytes: bytes) -> list:
     """
     try:
         # 解码滑块和背景图像为OpenCV格式
-        target = cv2.imdecode(
-            np.frombuffer(target_bytes, np.uint8), cv2.IMREAD_ANYCOLOR
-        )
-        background = cv2.imdecode(
-            np.frombuffer(background_bytes, np.uint8), cv2.IMREAD_ANYCOLOR
-        )
+        target = cv2.imdecode(np.frombuffer(target_bytes, np.uint8),
+                              cv2.IMREAD_ANYCOLOR)
+        background = cv2.imdecode(np.frombuffer(background_bytes, np.uint8),
+                                  cv2.IMREAD_ANYCOLOR)
 
         # 应用Canny边缘检测，将图像转换为二值图像
         background = cv2.Canny(background, 100, 200)
@@ -145,15 +142,15 @@ def recognize_blockPuzzle_captcha(target: str, background: str) -> str:
         background_bytes = base64.b64decode(background)
 
         # 调用滑块匹配算法获取目标区域的坐标
-        res = slide_match(target_bytes=target_bytes, background_bytes=background_bytes)
+        res = slide_match(target_bytes=target_bytes,
+                          background_bytes=background_bytes)
 
         # 从滑块图像提取宽度信息
         target_width = extract_png_width(target_bytes)
 
         # 计算滑块需要移动的距离
         slider_distance = calculate_precise_slider_distance(
-            res[0], res[1], target_width
-        )
+            res[0], res[1], target_width)
 
         # 构造返回的数据，格式为JSON
         slider_data = {
@@ -168,9 +165,9 @@ def recognize_blockPuzzle_captcha(target: str, background: str) -> str:
         raise
 
 
-def detect_objects(
-    model_path: str, image_data: MatLike, use_gpu: bool = False
-) -> list[list[int]]:
+def detect_objects(model_path: str,
+                   image_data: MatLike,
+                   use_gpu: bool = False) -> list[list[int]]:
     """
     使用ONNX模型进行目标检测。
     :param model_path: ONNX模型路径。
@@ -184,37 +181,34 @@ def detect_objects(
         scale = min(640 / image_data.shape[1], 640 / image_data.shape[0])
         img_resized = cv2.resize(
             image_data,
-            (int(image_data.shape[1] * scale), int(image_data.shape[0] * scale)),
+            (int(image_data.shape[1] * scale), int(
+                image_data.shape[0] * scale)),
         )
         new_image = np.full((640, 640, 3), 128, dtype=np.uint8)
-        dh, dw = (640 - img_resized.shape[0]) // 2, (640 - img_resized.shape[1]) // 2
-        new_image[dh : dh + img_resized.shape[0], dw : dw + img_resized.shape[1]] = (
-            img_resized
-        )
+        dh, dw = (640 - img_resized.shape[0]) // 2, (640 -
+                                                     img_resized.shape[1]) // 2
+        new_image[dh:dh + img_resized.shape[0],
+                  dw:dw + img_resized.shape[1]] = (img_resized)
 
         # 将图片转换成模型需要的输入格式
-        input_img = (
-            np.expand_dims(new_image.transpose((2, 0, 1)), axis=0).astype(np.float32)
-            / 255.0
-        )
+        input_img = (np.expand_dims(new_image.transpose(
+            (2, 0, 1)), axis=0).astype(np.float32) / 255.0)
 
         # 加载模型并运行
-        providers = ["CUDAExecutionProvider"] if use_gpu else ["CPUExecutionProvider"]
+        providers = ["CUDAExecutionProvider"
+                     ] if use_gpu else ["CPUExecutionProvider"]
         session = ort.InferenceSession(model_path, providers=providers)
         result = session.run(None, {session.get_inputs()[0].name: input_img})
 
         # 解析模型输出并应用非极大值抑制（NMS）
         detections = result[0][0]
-        boxes = [
-            [
-                x_center - width / 2,
-                y_center - height / 2,
-                x_center + width / 2,
-                y_center + height / 2,
-            ]
-            for x_center, y_center, width, height, confidence, *class_scores in detections
-            if confidence >= 0.5
-        ]
+        boxes = [[
+            x_center - width / 2,
+            y_center - height / 2,
+            x_center + width / 2,
+            y_center + height / 2,
+        ] for x_center, y_center, width, height, confidence, *class_scores in
+                 detections if confidence >= 0.5]
         scores = [
             max(class_scores)
             for _, _, _, _, confidence, *class_scores in detections
@@ -226,21 +220,20 @@ def detect_objects(
             boxes = [boxes[i] for i in indices]
 
         # 将边界框坐标还原到原始图像的尺寸
-        return [
-            [
-                int((x1 - dw) / scale),
-                int((y1 - dh) / scale),
-                int((x2 - dw) / scale),
-                int((y2 - dh) / scale),
-            ]
-            for x1, y1, x2, y2 in boxes
-        ]
+        return [[
+            int((x1 - dw) / scale),
+            int((y1 - dh) / scale),
+            int((x2 - dw) / scale),
+            int((y2 - dh) / scale),
+        ] for x1, y1, x2, y2 in boxes]
 
     except Exception as e:
         raise ValueError(f"目标检测失败: {e}")
 
 
-def predict_ocr(model_path: str, image: np.ndarray, use_gpu: bool = False) -> str:
+def predict_ocr(model_path: str,
+                image: np.ndarray,
+                use_gpu: bool = False) -> str:
     """
     使用ONNX模型进行OCR预测。
     :param model_path: ONNX模型路径。
@@ -253,17 +246,15 @@ def predict_ocr(model_path: str, image: np.ndarray, use_gpu: bool = False) -> st
         # 加载ONNX模型
         session = ort.InferenceSession(
             model_path,
-            providers=(
-                ["CUDAExecutionProvider"] if use_gpu else ["CPUExecutionProvider"]
-            ),
+            providers=(["CUDAExecutionProvider"]
+                       if use_gpu else ["CPUExecutionProvider"]),
         )
 
         # 预处理图片
         image = np.expand_dims(
-            cv2.cvtColor(cv2.resize(image, (64, 64)), cv2.COLOR_BGR2RGB)
-            .transpose((2, 0, 1))
-            .astype(np.float32)
-            / 255.0,
+            cv2.cvtColor(cv2.resize(image,
+                                    (64, 64)), cv2.COLOR_BGR2RGB).transpose(
+                                        (2, 0, 1)).astype(np.float32) / 255.0,
             axis=0,
         )
 
@@ -759,10 +750,8 @@ def predict_ocr(model_path: str, image: np.ndarray, use_gpu: bool = False) -> st
         ]
 
         # 运行模型推理并处理输出
-        return "".join(
-            charset[item]
-            for item in session.run(None, {session.get_inputs()[0].name: image})[1]
-        )
+        return "".join(charset[item] for item in session.run(
+            None, {session.get_inputs()[0].name: image})[1])
 
     except Exception as e:
         raise Exception(f"OCR预测失败: {e}")
@@ -787,7 +776,8 @@ def recognize_clickWord_captcha(target: str, wordlist: list) -> str:
     target_bytes = base64.b64decode(target)
 
     # 将图片转换为 OpenCV 格式
-    image = cv2.imdecode(np.frombuffer(target_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+    image = cv2.imdecode(np.frombuffer(target_bytes, dtype=np.uint8),
+                         cv2.IMREAD_COLOR)
 
     bboxes = detect_objects("./models/yolov5n.onnx", image)
 
@@ -796,7 +786,8 @@ def recognize_clickWord_captcha(target: str, wordlist: list) -> str:
     for bbox in bboxes:
         try:
             x_min, y_min, x_max, y_max = bbox
-            text = predict_ocr("./models/ocr.onnx", image[y_min:y_max, x_min:x_max])
+            text = predict_ocr("./models/ocr.onnx", image[y_min:y_max,
+                                                          x_min:x_max])
             recognized_dict[text] = bbox
         except Exception as e:
             logger.warning(f"处理文本框时出错: {e}")

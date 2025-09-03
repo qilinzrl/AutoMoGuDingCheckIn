@@ -4,6 +4,7 @@ import re
 import time
 import uuid
 import random
+import threading
 from typing import Dict, Any, List, Optional
 
 import requests
@@ -13,6 +14,14 @@ from util.CryptoUtils import create_sign, aes_encrypt, aes_decrypt
 from util.CaptchaUtils import recognize_blockPuzzle_captcha, recognize_clickWord_captcha
 from util.HelperFunctions import get_current_month_info
 
+# 尝试导入主模块的日志上下文，失败则创建本地版本
+try:
+    from main import _log_ctx
+except ImportError:
+    _log_ctx = threading.local()
+
+logger = logging.getLogger(__name__)
+
 # 常量
 BASE_URL = "https://api.moguding.net:9000/"
 HEADERS = {
@@ -21,8 +30,6 @@ HEADERS = {
     "accept-encoding": "gzip",
     "host": "api.moguding.net:9000",
 }
-
-logger = logging.getLogger(__name__)
 
 
 class ApiClient:
@@ -70,9 +77,10 @@ class ApiClient:
             ValueError: 如果请求失败或响应包含错误信息，则抛出包含详细错误信息的异常。
         """
         try:
-            response = requests.post(
-                f"{BASE_URL}{url}", headers=headers, json=data, timeout=10
-            )
+            response = requests.post(f"{BASE_URL}{url}",
+                                     headers=headers,
+                                     json=data,
+                                     timeout=10)
             response.raise_for_status()
             rsp = response.json()
 
@@ -82,21 +90,21 @@ class ApiClient:
             if rsp.get("code") == 200 or rsp.get("code") == 6111:
                 return rsp
 
-            if (
-                "token失效" in rsp.get("msg", "未知错误")
-                and retry_count < self.max_retries
-            ):
+            if ("token失效" in rsp.get("msg", "未知错误")
+                    and retry_count < self.max_retries):
                 wait_time = 1 * (2**retry_count)
                 time.sleep(wait_time)
                 logger.warning("Token失效，正在重新登录...")
                 self.login()
-                headers["authorization"] = self.config.get_value("userInfo.token")
+                headers["authorization"] = self.config.get_value(
+                    "userInfo.token")
                 return self._post_request(url, headers, data, retry_count + 1)
             else:
                 raise ValueError(rsp.get("msg", "未知错误"))
 
         except (requests.RequestException, ValueError) as e:
-            if re.search(r"[\u4e00-\u9fff]", str(e)) or retry_count >= self.max_retries:
+            if re.search(r"[\u4e00-\u9fff]",
+                         str(e)) or retry_count >= self.max_retries:
                 raise ValueError(f"{str(e)}")
 
             wait_time = 1 * (2**retry_count)
@@ -138,11 +146,13 @@ class ApiClient:
             )
             check_slider_url = "session/captcha/v1/check"
             check_slider_data = {
-                "pointJson": aes_encrypt(
-                    slider_data, captcha_info["data"]["secretKey"], "b64"
-                ),
-                "token": captcha_info["data"]["token"],
-                "captchaType": "blockPuzzle",
+                "pointJson":
+                aes_encrypt(slider_data, captcha_info["data"]["secretKey"],
+                            "b64"),
+                "token":
+                captcha_info["data"]["token"],
+                "captchaType":
+                "blockPuzzle",
             }
             check_result = self._post_request(
                 check_slider_url,
@@ -186,11 +196,14 @@ class ApiClient:
             # 验证验证码的接口地址
             verification_endpoint = "/attendence/clock/v1/check"
             verification_payload = {
-                "pointJson": aes_encrypt(
-                    captcha_solution, captcha_response["data"]["secretKey"], "b64"
-                ),  # 加密的点位数据
-                "token": captcha_response["data"]["token"],  # 验证码令牌
-                "captchaType": "clickWord",  # 验证码类型
+                "pointJson":
+                aes_encrypt(captcha_solution,
+                            captcha_response["data"]["secretKey"],
+                            "b64"),  # 加密的点位数据
+                "token":
+                captcha_response["data"]["token"],  # 验证码令牌
+                "captchaType":
+                "clickWord",  # 验证码类型
             }
 
             # 验证用户点击结果
@@ -203,7 +216,8 @@ class ApiClient:
             # 如果验证码验证成功，则返回加密结果
             if verification_response.get("code") != 6111:  # 6111 表示验证码验证失败
                 encrypted_result = aes_encrypt(
-                    captcha_response["data"]["token"] + "---" + captcha_solution,
+                    captcha_response["data"]["token"] + "---" +
+                    captcha_solution,
                     captcha_response["data"]["secretKey"],
                     "b64",
                 )
@@ -229,7 +243,8 @@ class ApiClient:
         url = "session/user/v6/login"
         data = {
             "phone": aes_encrypt(self.config.get_value("config.user.phone")),
-            "password": aes_encrypt(self.config.get_value("config.user.password")),
+            "password":
+            aes_encrypt(self.config.get_value("config.user.password")),
             "captcha": self.pass_blockPuzzle_captcha(),
             "loginType": "android",
             "uuid": str(uuid.uuid4()).replace("-", ""),
@@ -251,13 +266,14 @@ class ApiClient:
             ValueError: 如果获取实习计划失败，抛出包含详细错误信息的异常。
         """
         url = "practice/plan/v3/getPlanByStu"
-        data = {"pageSize": 999999, "t": aes_encrypt(str(int(time.time() * 1000)))}
-        headers = self._get_authenticated_headers(
-            sign_data=[
-                self.config.get_value("userInfo.userId"),
-                self.config.get_value("userInfo.roleKey"),
-            ]
-        )
+        data = {
+            "pageSize": 999999,
+            "t": aes_encrypt(str(int(time.time() * 1000)))
+        }
+        headers = self._get_authenticated_headers(sign_data=[
+            self.config.get_value("userInfo.userId"),
+            self.config.get_value("userInfo.roleKey"),
+        ])
         rsp = self._post_request(url, headers, data)
         plan_info = rsp.get("data", [{}])[0]
         self.config.update_config(plan_info, "planInfo")
@@ -305,13 +321,11 @@ class ApiClient:
             "planId": self.config.get_value("planInfo.planId"),
             "t": aes_encrypt(str(int(time.time() * 1000))),
         }
-        headers = self._get_authenticated_headers(
-            sign_data=[
-                self.config.get_value("userInfo.userId"),
-                self.config.get_value("userInfo.roleKey"),
-                report_type,
-            ]
-        )
+        headers = self._get_authenticated_headers(sign_data=[
+            self.config.get_value("userInfo.userId"),
+            self.config.get_value("userInfo.roleKey"),
+            report_type,
+        ])
         rsp = self._post_request(url, headers, data)
         return rsp
 
@@ -329,14 +343,12 @@ class ApiClient:
             ValueError: 如果提交报告失败，抛出包含详细错误信息的异常。
         """
         url = "practice/paper/v6/save"
-        headers = self._get_authenticated_headers(
-            sign_data=[
-                self.config.get_value("userInfo.userId"),
-                report_info.get("reportType"),
-                self.config.get_value("planInfo.planId"),
-                report_info.get("title"),
-            ]
-        )
+        headers = self._get_authenticated_headers(sign_data=[
+            self.config.get_value("userInfo.userId"),
+            report_info.get("reportType"),
+            self.config.get_value("planInfo.planId"),
+            report_info.get("title"),
+        ])
         data = {
             "address": None,
             "applyId": None,
@@ -422,7 +434,10 @@ class ApiClient:
             list[Dict[str, Any]]: 问卷
         """
         url = "practice/paper/v2/info"
-        data = {"formType": formType, "t": aes_encrypt(str(int(time.time() * 1000)))}
+        data = {
+            "formType": formType,
+            "t": aes_encrypt(str(int(time.time() * 1000)))
+        }
         headers = self._get_authenticated_headers()
         rsp = self._post_request(url, headers, data).get("data", {})
         formFieldDtoList = rsp.get("formFieldDtoList", [])
@@ -455,7 +470,8 @@ class ApiClient:
         headers = self._get_authenticated_headers()
         data = {
             **get_current_month_info(),
-            "t": aes_encrypt(str(int(time.time() * 1000))),
+            "t":
+            aes_encrypt(str(int(time.time() * 1000))),
         }
         rsp = self._post_request(url, headers, data)
         # 每月第一天的第一次打卡返回的是空，所以特殊处理返回空字典
@@ -558,7 +574,8 @@ class ApiClient:
         return rsp.get("data", "")
 
     def _get_authenticated_headers(
-        self, sign_data: Optional[List[Optional[str]]] = None  # 允许 List[str | None]
+        self,
+        sign_data: Optional[List[Optional[str]]] = None  # 允许 List[str | None]
     ) -> Dict[str, str]:
         """
         生成带有认证信息的请求头。

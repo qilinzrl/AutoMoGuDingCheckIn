@@ -1,5 +1,6 @@
 import logging
 import random
+import threading
 from typing import Dict, List, Any
 from collections import Counter
 import smtplib
@@ -9,6 +10,12 @@ from email.header import Header
 from email.utils import formataddr
 
 import requests
+
+# 尝试导入主模块的日志上下文，失败则创建本地版本
+try:
+    from main import _log_ctx
+except ImportError:
+    _log_ctx = threading.local()
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +42,8 @@ class MessagePusher:
         Returns:
             bool: 是否推送成功。
         """
-        skip_count = sum(1 for result in results if result.get("status") == "skip")
+        skip_count = sum(1 for result in results
+                         if result.get("status") == "skip")
         if skip_count == len(results):
             logger.info("所有任务都被跳过，不发送推送消息")
             return
@@ -161,8 +169,7 @@ class MessagePusher:
         """
         msg = MIMEMultipart()
         msg["From"] = formataddr(
-            (Header(config["from"], "utf-8").encode(), config["username"])
-        )
+            (Header(config["from"], "utf-8").encode(), config["username"]))
         msg["To"] = config["to"]
         msg["Subject"] = Header(title, "utf-8").encode()
 
@@ -189,7 +196,8 @@ class MessagePusher:
         message_parts = ["# 工学云任务执行报告\n\n"]
 
         # 任务执行统计
-        status_counts = Counter(result.get("status", "unknown") for result in results)
+        status_counts = Counter(
+            result.get("status", "unknown") for result in results)
         total_tasks = len(results)
 
         message_parts.append("## 📊 执行统计\n\n")
@@ -205,39 +213,31 @@ class MessagePusher:
             task_type = result.get("task_type", "未知任务")
             status = result.get("status", "unknown")
             status_emoji = MessagePusher.STATUS_EMOJIS.get(
-                status, MessagePusher.STATUS_EMOJIS["unknown"]
-            )
+                status, MessagePusher.STATUS_EMOJIS["unknown"])
 
-            message_parts.extend(
-                [
-                    f"### {status_emoji} {task_type}\n\n",
-                    f"**状态**：{status}\n\n",
-                    f"**结果**：{result.get('message', '无消息')}\n\n",
-                ]
-            )
+            message_parts.extend([
+                f"### {status_emoji} {task_type}\n\n",
+                f"**状态**：{status}\n\n",
+                f"**结果**：{result.get('message', '无消息')}\n\n",
+            ])
 
             details = result.get("details")
             if status == "success" and isinstance(details, dict):
                 message_parts.append("**详细信息**：\n\n")
-                message_parts.extend(
-                    f"- **{key}**：{value}\n" for key, value in details.items()
-                )
+                message_parts.extend(f"- **{key}**：{value}\n"
+                                     for key, value in details.items())
                 message_parts.append("\n")
 
             # 添加报告内容（如果有）
             if status == "success" and task_type in [
-                "日报提交",
-                "周报提交",
-                "月报提交",
+                    "日报提交",
+                    "周报提交",
+                    "月报提交",
             ]:
                 report_content = result.get("report_content", "")
                 if report_content:
                     message_parts.extend(
-                        [
-                            f"**报告**：",
-                            f"```\n{report_content}\n```\n"
-                        ]
-                    )
+                        [f"**报告**：", f"```\n{report_content}\n```\n"])
 
             message_parts.append("---\n\n")
 
@@ -254,7 +254,8 @@ class MessagePusher:
         Returns:
             str: HTML格式的消息。
         """
-        status_counts = Counter(result.get("status", "unknown") for result in results)
+        status_counts = Counter(
+            result.get("status", "unknown") for result in results)
         total_tasks = len(results)
 
         html = f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工学云任务执行报告</title><style>*{{margin:0;}}:root{{--bg-color:#f8f9fa;--text-color:#212529;--card-bg:#fff;--card-border:#dee2e6;--success-color:#28a745;--danger-color:#dc3545;--warning-color:#ffc107;--secondary-color:#6c757d}}@media(prefers-color-scheme:dark){{:root{{--bg-color:#343a40;--text-color:#f8f9fa;--card-bg:#495057;--card-border:#6c757d;--success-color:#5cb85c;--danger-color:#d9534f;--warning-color:#f0ad4e;--secondary-color:#a9a9a9}}}}body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.5;color:var(--text-color);background-color:var(--bg-color);margin:0;padding:20px;transition:background-color .3s}}h1,h2,h3{{margin-top:0}}h1{{text-align:center;margin-bottom:30px}}h2{{margin-bottom:20px}}.row{{display:flex;flex-wrap:wrap;margin:0 -15px}}.col{{flex:1;padding:0 15px;min-width:250px}}.card{{background-color:var(--card-bg);border:1px solid var(--card-border);border-radius:5px;padding:20px;margin-bottom:20px;transition:background-color .3s}}.card-title{{margin-top:0}}.text-center{{text-align:center}}.text-success{{color:var(--success-color)}}.text-danger{{color:var(--danger-color)}}.text-warning{{color:var(--warning-color)}}.text-secondary{{color:var(--secondary-color)}}.bg-light{{background-color:rgba(0,0,0,.05);border-radius:5px;padding:10px}}.report-preview{{font-style:italic;margin-top:10px}}.full-report{{display:none}}.show-report:checked+.full-report{{display:block}}pre{{white-space:pre-wrap;word-wrap:break-word;background-color:rgba(0,0,0,.05);padding:10px;border-radius:5px}}@media(max-width:768px){{.row{{flex-direction:column}}}}</style></head><body><div class="container"><h1>工学云任务执行报告</h1><div class="row"><div class="col"><div class="card text-center"><h3 class="card-title">总任务数</h3><p class="card-text" style="font-size:2em">{total_tasks}</p></div></div><div class="col"><div class="card text-center"><h3 class="card-title">成功</h3><p class="card-text text-success" style="font-size:2em">{status_counts['success']}</p></div></div><div class="col"><div class="card text-center"><h3 class="card-title">失败</h3><p class="card-text text-danger" style="font-size:2em">{status_counts['fail']}</p></div></div><div class="col"><div class="card text-center"><h3 class="card-title">跳过</h3><p class="card-text text-warning" style="font-size:2em">{status_counts['skip']}</p></div></div></div><h2>详细任务报告</h2>"""
@@ -263,8 +264,7 @@ class MessagePusher:
             task_type = result.get("task_type", "未知任务")
             status = result.get("status", "unknown")
             status_emoji = MessagePusher.STATUS_EMOJIS.get(
-                status, MessagePusher.STATUS_EMOJIS["unknown"]
-            )
+                status, MessagePusher.STATUS_EMOJIS["unknown"])
             status_class = {
                 "success": "text-success",
                 "fail": "text-danger",
@@ -282,17 +282,14 @@ class MessagePusher:
                 html += "</div>"
 
             if status == "success" and task_type in [
-                "日报提交",
-                "周报提交",
-                "月报提交",
+                    "日报提交",
+                    "周报提交",
+                    "月报提交",
             ]:
                 report_content = result.get("report_content", "")
                 if report_content:
-                    preview = (
-                        f"{report_content[:50]}..."
-                        if len(report_content) > 50
-                        else report_content
-                    )
+                    preview = (f"{report_content[:50]}..."
+                               if len(report_content) > 50 else report_content)
                     html += f"""<div class="report-preview"><details><summary><strong>报告预览：</strong>{preview}</summary><div class="full-report"><pre>{report_content}</pre></div></details></div>"""
 
             html += "</div>"

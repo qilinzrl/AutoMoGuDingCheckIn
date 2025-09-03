@@ -1,8 +1,15 @@
 import json
 import logging
 import random
+import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+# 尝试导入主模块的日志上下文，失败则创建本地版本
+try:
+    from main import _log_ctx
+except ImportError:
+    _log_ctx = threading.local()
 
 logger = logging.getLogger(__name__)
 
@@ -10,9 +17,9 @@ logger = logging.getLogger(__name__)
 class ConfigManager:
     """管理配置文件的加载、验证和更新。"""
 
-    def __init__(
-        self, path: Optional[str] = None, config: Optional[Dict[str, Any]] = None
-    ):
+    def __init__(self,
+                 path: Optional[str] = None,
+                 config: Optional[Dict[str, Any]] = None):
         """
         初始化ConfigManager实例。
 
@@ -53,10 +60,8 @@ class ConfigManager:
             # 检查并添加 mode 字段
             if "mode" not in clock_in:
                 clock_in["mode"] = "daily"
-                logger.warning(
-                    "配置文件中缺少 'mode' 字段，已自动添加默认值 'daily'。"
-                    "请尽快更新配置文件以确保正确性。"
-                )
+                logger.warning("配置文件中缺少 'mode' 字段，已自动添加默认值 'daily'。"
+                               "请尽快更新配置文件以确保正确性。")
 
             # 确保 location 字典存在
             location = clock_in.setdefault("location", {})

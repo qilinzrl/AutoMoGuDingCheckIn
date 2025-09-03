@@ -33,9 +33,9 @@ def create_sign(*args) -> str:
         raise ValueError(f"签名生成失败: {str(e)}")
 
 
-def aes_encrypt(
-    plaintext: str, key: str = "23DbtQHR2UMbH6mJ", out_format: str = "hex"
-) -> str:
+def aes_encrypt(plaintext: str,
+                key: str = "23DbtQHR2UMbH6mJ",
+                out_format: str = "hex") -> str:
     """
     AES加密。
 
@@ -64,9 +64,9 @@ def aes_encrypt(
         raise ValueError(f"加密失败: {str(e)}")
 
 
-def aes_decrypt(
-    ciphertext: str, key: str = "23DbtQHR2UMbH6mJ", out_format: str = "hex"
-) -> str:
+def aes_decrypt(ciphertext: str,
+                key: str = "23DbtQHR2UMbH6mJ",
+                out_format: str = "hex") -> str:
     """
     AES解密。
 
