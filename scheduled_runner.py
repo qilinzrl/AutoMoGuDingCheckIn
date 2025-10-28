@@ -20,7 +20,7 @@ logger = logging.getLogger("scheduler")
 # 设置调度器的日志标签
 _log_ctx.tag = "SCHEDULER"
 
-BASE_TIMES = ["18:16", "22:30"]  # 触发打卡的基础时间点
+BASE_TIMES = ["18:30", "22:30"]  # 触发打卡的基础时间点
 MAX_OFFSET_MINUTES = 0  # 去机器化，随机让时间点偏移 0~10 分钟
 
 
